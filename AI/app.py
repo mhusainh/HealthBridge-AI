@@ -4,150 +4,172 @@ import json
 import networkx as nx
 import matplotlib.pyplot as plt
 import os
+from dotenv import load_dotenv
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="HealthBridge AI", page_icon="🏥", layout="wide")
+st.set_page_config(
+    page_title="HealthBridge AI",
+    page_icon="🏥",
+    layout="wide"
+)
 
-# --- DEBUGGING PATH (Supaya ketahuan salahnya dimana) ---
-# Kita coba 3 kemungkinan lokasi file
-POSSIBLE_PATHS = [
-    # 1. Alamat LENGKAP Laptopmu (Berdasarkan screenshot terminalmu)
-    r"C:\Users\NITRO 5\Documents\GitHub\HealthBridge-AI\AI\fhir_data_1000.json",
-    
-    # 2. Alamat relatif terhadap file script ini
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fhir_data_1000.json'),
-    
-    # 3. Alamat relatif sederhana
-    "fhir_data_1000.json"
-]
+# --- KONFIGURASI FILE (Relatif) ---
+# Syarat: Terminal harus dijalankan di dalam folder AI
+load_dotenv() # Otomatis cari .env di folder yang sama
+file_path = os.getenv("FILENAME")
 
 @st.cache_data
 def load_data():
     options = {}
     bundle = {}
-    loaded_path = ""
     
-    # Cek satu per satu lokasi yang mungkin
-    for path in POSSIBLE_PATHS:
-        if os.path.exists(path):
-            try:
-                with open(path, 'r') as f:
-                    bundle = json.load(f)
-                loaded_path = path
-                break # Ketemu! Berhenti mencari.
-            except:
-                continue
-
-    if loaded_path:
-        # Jika file ketemu, parsing isinya
-        entries = bundle.get('entry', [])
-        for entry in entries:
-            if entry['resource']['resourceType'] == 'Patient':
-                res = entry['resource']
-                nik = res['identifier'][0]['value'] if 'identifier' in res else "UNK"
-                nama = res['name'][0]['text']
-                options[f"{nama} ({nik})"] = nik
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r') as f:
+                bundle = json.load(f)
+            
+            entries = bundle.get('entry', [])
+            for entry in entries:
+                if entry['resource']['resourceType'] == 'Patient':
+                    res = entry['resource']
+                    # Ambil NIK aman
+                    if 'identifier' in res and len(res['identifier']) > 0:
+                        nik = res['identifier'][0]['value']
+                    else:
+                        nik = "UNKNOWN"
+                    
+                    nama = res['name'][0]['text']
+                    options[f"{nama} ({nik})"] = nik
+                    
+        except Exception as e:
+            st.error(f"Error membaca JSON: {e}")
     else:
-        # JIKA MASIH GAGAL JUGA -> Pakai Data Darurat
-        options["⚠️ FILE TETAP HILANG - Pakai Data Dummy"] = "3374123456789001"
-        st.error(f"❌ Python tidak bisa menemukan file JSON di lokasi manapun: {POSSIBLE_PATHS}")
-
-    return options, bundle, loaded_path
+        # Fallback jika file tidak ketemu
+        st.error(f"❌ File '{JSON_FILENAME}' tidak ditemukan di: {current_dir}")
+        st.warning("👉 Pastikan Anda menjalankan perintah 'streamlit run app.py' DARI DALAM folder AI.")
+        
+    return options, bundle
 
 # Load Data
-patient_options, full_bundle, success_path = load_data()
+patient_options, full_bundle = load_data()
 
-# --- SIDEBAR (Debug Info) ---
-with st.sidebar:
-    st.title("HealthBridge AI")
-    
-    # Tampilkan status file di sidebar biar tenang
-    if "⚠️" in list(patient_options.keys())[0]:
-        st.error("Status Database: ❌ GAGAL LOAD")
-    else:
-        st.success("Status Database: ✅ TERHUBUNG")
-        # st.caption(f"Source: {success_path}") # Uncomment kalau mau lihat path-nya
-
-    st.markdown("---")
-    st.subheader("Pilih Pasien")
-    selected_label = st.selectbox("Cari Nama:", options=list(patient_options.keys()))
-    selected_nik = patient_options[selected_label]
-    
-    if selected_nik:
-        st.info(f"NIK: **{selected_nik}**")
-
-# --- FUNGSI GRAPH (Sama seperti sebelumnya) ---
+# --- FUNGSI VISUALISASI GRAPH (LENGKAP VITAL SIGN) ---
 def draw_graph(nik_target, bundle_data):
     G = nx.DiGraph()
+    uuid_to_nik = {}
     entries = bundle_data.get('entry', [])
+    
     patient_uuid = ""
     
+    # 1. Node Pasien
     for entry in entries:
         res = entry['resource']
         if res['resourceType'] == 'Patient':
             curr_nik = res['identifier'][0]['value'] if 'identifier' in res else "UNK"
+            uuid_to_nik["urn:uuid:" + res['id']] = curr_nik
+            
             if curr_nik == nik_target:
-                nama = res['name'][0]['text']
+                nama_pasien = res['name'][0]['text']
                 patient_uuid = "urn:uuid:" + res['id']
-                G.add_node("PASIEN", label=f"{nama}\n(Pasien)", color='#ADD8E6', shape='s')
+                G.add_node("PASIEN", label=f"{nama_pasien}\n(Pasien)", color='#ADD8E6', shape='s', size=3000)
                 
                 # Alergi
                 if "extension" in res:
                     for ext in res["extension"]:
                         if "allergy" in ext["url"]:
                             for a in ext["valueString"].split(","):
-                                G.add_node(f"ALG_{a}", label=f"ALERGI:\n{a}", color='#FFB6C1', shape='o')
+                                G.add_node(f"ALG_{a}", label=f"ALERGI:\n{a}", color='#FFB6C1', shape='o', size=2000)
                                 G.add_edge("PASIEN", f"ALG_{a}", label="MEMILIKI")
 
-    # Vital & Obat
+    # 2. Node Vital Sign (TB/BB/Tensi) - UNGU
     for entry in entries:
         res = entry['resource']
-        # Observation
-        if res['resourceType'] == 'Observation' and res['subject']['reference'] == patient_uuid:
-            try:
-                code = res['code']['coding'][0]['display']
-                if 'Body Weight' in code:
-                    val = f"{res['valueQuantity']['value']} kg"
-                    G.add_node("BB", label=f"BB\n{val}", color='#E6E6FA', shape='o')
-                    G.add_edge("PASIEN", "BB", label="STATUS")
-                elif 'Blood Pressure' in code:
-                    sys = res['component'][0]['valueQuantity']['value']
-                    val = f"{sys}/{res['component'][1]['valueQuantity']['value']}"
-                    G.add_node("BP", label=f"TENSI\n{val}", color='#E6E6FA', shape='o')
-                    G.add_edge("PASIEN", "BP", label="STATUS")
-            except: pass
-            
-        # Obat
-        if res['resourceType'] == 'MedicationRequest' and res['subject']['reference'] == patient_uuid:
-            try:
-                obat = res['medicationCodeableConcept']['coding'][0].get('display', 'Obat')
-                diag = res.get('reasonCode', [{}])[0].get('text', '?')
-                node_obat = f"OBT_{obat}"
-                node_diag = f"DIA_{diag}"
-                
-                G.add_node(node_obat, label=f"OBAT\n{obat}", color='#90EE90', shape='o')
-                G.add_node(node_diag, label=f"DIAGNOSA\n{diag}", color='#FFD700', shape='o')
-                G.add_edge("PASIEN", node_obat, label="DIRESEPKAN")
-                G.add_edge(node_obat, node_diag, label="UNTUK")
-            except: pass
-            
+        if res['resourceType'] == 'Observation':
+            if res['subject']['reference'] == patient_uuid:
+                try:
+                    code = res['code']['coding'][0]['code']
+                    val = ""
+                    label = ""
+                    
+                    if code == "29463-7": # BB
+                        val = f"{res['valueQuantity']['value']} kg"
+                        label = "Berat"
+                    elif code == "8302-2": # TB
+                        val = f"{res['valueQuantity']['value']} cm"
+                        label = "Tinggi"
+                    elif code == "85354-9": # Tensi
+                        sys = res['component'][0]['valueQuantity']['value']
+                        dia = res['component'][1]['valueQuantity']['value']
+                        val = f"{sys}/{dia}"
+                        label = "Tensi"
+                    
+                    if val:
+                        node_id = f"VITAL_{label}"
+                        G.add_node(node_id, label=f"{label}\n{val}", color='#D8BFD8', shape='o', size=2000) # Ungu Thistle
+                        G.add_edge("PASIEN", node_id, label="STATUS")
+                except:
+                    pass
+
+    # 3. Node Obat & Diagnosa
+    for entry in entries:
+        res = entry['resource']
+        if res['resourceType'] == 'MedicationRequest':
+            if res['subject']['reference'] == patient_uuid:
+                try:
+                    obat = res['medicationCodeableConcept']['coding'][0].get('display', 'Obat')
+                    diag = res.get('reasonCode', [{}])[0].get('text', '?')
+                    
+                    node_obat = f"OBT_{obat}"
+                    node_diag = f"DIA_{diag}"
+                    
+                    G.add_node(node_obat, label=f"OBAT\n{obat}", color='#90EE90', shape='o', size=2500)
+                    G.add_node(node_diag, label=f"DIAGNOSA\n{diag}", color='#FFD700', shape='o', size=2500)
+                    
+                    G.add_edge("PASIEN", node_obat, label="DIRESEPKAN")
+                    G.add_edge(node_obat, node_diag, label="UNTUK")
+                except:
+                    pass
+
     return G
+
+# --- UI SIDEBAR ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/3004/3004458.png", width=80)
+    st.title("HealthBridge AI")
+    st.caption("v1.0 - Hackathon Edition")
+    st.markdown("---")
+    st.subheader("Pilih Pasien")
+    
+    if patient_options:
+        selected_label = st.selectbox("Cari Nama / NIK:", options=list(patient_options.keys()))
+        selected_nik = patient_options[selected_label]
+    else:
+        st.error("Database Kosong / Tidak Terbaca")
+        selected_nik = ""
+        
+    if selected_nik:
+        st.info(f"NIK: **{selected_nik}**")
 
 # --- UI UTAMA ---
 st.title("🏥 Doctor's Copilot Dashboard")
+st.markdown("Sistem integrasi data rekam medis & tanda vital berbasis **Knowledge Graph**.")
 
 if st.button("🔍 ANALISA DATA PASIEN", type="primary", use_container_width=True):
-    if not selected_nik or "⚠️" in selected_label:
-        st.warning("Pilih pasien yang valid dulu.")
+    if not selected_nik:
+        st.warning("Pilih pasien dulu.")
     else:
         try:
-            with st.spinner('🤖 AI sedang berpikir...'):
+            with st.spinner('🤖 AI sedang menganalisis Tanda Vital & Interaksi Obat...'):
+                # API Call ke Localhost
                 api_url = f"http://localhost:8000/analyze/{selected_nik}"
                 response = requests.get(api_url)
                 
             if response.status_code == 200:
                 result = response.json()
+                
+                # 1. Header Status
                 status = result.get('status', 'AMAN')
+                skor = result.get('skor_risiko', 0)
                 
                 c1, c2 = st.columns([2, 1])
                 with c1:
@@ -155,33 +177,46 @@ if st.button("🔍 ANALISA DATA PASIEN", type="primary", use_container_width=Tru
                     elif status == "PERINGATAN": st.warning(f"## STATUS: {status}")
                     else: st.success(f"## STATUS: {status}")
                 with c2:
-                    st.metric("Skor Risiko", f"{result.get('skor_risiko', 0)}/100")
+                    st.metric("Skor Risiko", f"{skor}/100")
                 
-                st.info(f"**Ringkasan:**\n{result.get('ringkasan_pasien', '-')}")
+                # 2. Ringkasan Klinis (Teks dari AI)
+                st.info(f"**Ringkasan Pasien:**\n\n{result.get('ringkasan_pasien', '-')}")
                 
-                c3, c4 = st.columns(2)
-                with c3:
-                    st.subheader("💊 Analisis")
+                # 3. Kolom Analisis
+                col_kiri, col_kanan = st.columns(2)
+                with col_kiri:
+                    st.subheader("💊 Analisis Farmasi")
                     st.write(result.get('analisis_obat', '-'))
-                with c4:
-                    st.subheader("💡 Rekomendasi")
+                with col_kanan:
+                    st.subheader("💡 Rekomendasi Medis")
                     st.success(result.get('rekomendasi', '-'))
                 
-                # Graph
+                # 4. Visualisasi Graph
                 st.markdown("---")
-                st.subheader("🕸️ Knowledge Graph")
+                st.subheader("🕸️ Knowledge Graph Visualization")
+                
                 G = draw_graph(selected_nik, full_bundle)
                 if G.number_of_nodes() > 0:
-                    fig, ax = plt.subplots(figsize=(10, 6))
-                    pos = nx.spring_layout(G, k=0.8, seed=42)
+                    fig, ax = plt.subplots(figsize=(12, 7))
+                    pos = nx.spring_layout(G, k=0.9, seed=42) # Layout renggang
+                    
+                    # Ambil atribut visual
                     colors = [nx.get_node_attributes(G, 'color').get(n, '#ddd') for n in G.nodes()]
+                    sizes = [nx.get_node_attributes(G, 'size').get(n, 1500) for n in G.nodes()]
                     labels = nx.get_node_attributes(G, 'label')
-                    nx.draw(G, pos, ax=ax, node_color=colors, with_labels=False, node_size=2000, edge_color='gray')
-                    nx.draw_networkx_labels(G, pos, labels, font_size=7)
+                    
+                    # Gambar
+                    nx.draw(G, pos, ax=ax, node_color=colors, node_size=sizes, edge_color='gray', width=1.5, arrowsize=15)
+                    nx.draw_networkx_labels(G, pos, labels, font_size=8)
+                    edge_labels = nx.get_edge_attributes(G, 'label')
+                    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=7)
+                    
                     st.pyplot(fig)
                 else:
                     st.warning("Data graph kosong.")
+
             else:
                 st.error(f"Backend Error: {response.text}")
+                
         except Exception as e:
-            st.error(f"Gagal koneksi Backend: {e}")
+            st.error(f"Gagal koneksi Backend (Main.py sudah jalan?): {e}")
