@@ -15,6 +15,7 @@ HealthBridge-AI adalah sistem cerdas yang dirancang untuk membantu tenaga medis 
 ## ⚙️ Persiapan (Installation)
 
 1.  **Clone Repository**
+
     ```bash
     git clone https://github.com/mhusainh/HealthBridge-AI.git
     cd HealthBridge-AI
@@ -22,6 +23,7 @@ HealthBridge-AI adalah sistem cerdas yang dirancang untuk membantu tenaga medis 
 
 2.  **Install Dependencies**
     Pastikan Python sudah terinstal, lalu jalankan perintah berikut untuk menginstal library yang dibutuhkan:
+
     ```bash
     pip install streamlit fastapi uvicorn google-generativeai networkx matplotlib python-dotenv requests
     ```
@@ -39,6 +41,7 @@ HealthBridge-AI adalah sistem cerdas yang dirancang untuk membantu tenaga medis 
 Anda memiliki dua opsi untuk menjalankan aplikasi ini: sebagai Dashboard Web (Streamlit) atau sebagai API Server (FastAPI).
 
 ### Opsi 1: Menjalankan Dashboard Web (Streamlit)
+
 Gunakan opsi ini jika Anda ingin tampilan visual interaktif untuk memilih pasien, melihat graf, dan hasil analisis AI.
 
 1.  Buka terminal dan masuk ke folder `AI`:
@@ -52,6 +55,7 @@ Gunakan opsi ini jika Anda ingin tampilan visual interaktif untuk memilih pasien
 3.  Browser akan otomatis terbuka di alamat `http://localhost:8501`.
 
 ### Opsi 2: Menjalankan Backend API (FastAPI)
+
 Gunakan opsi ini jika Anda ingin menyediakan layanan API untuk aplikasi lain (misalnya Frontend React/Mobile).
 
 1.  Buka terminal dan masuk ke folder `AI`:
@@ -62,7 +66,7 @@ Gunakan opsi ini jika Anda ingin menyediakan layanan API untuk aplikasi lain (mi
     ```bash
     python main.py
     ```
-    *Atau menggunakan uvicorn langsung:*
+    _Atau menggunakan uvicorn langsung:_
     ```bash
     uvicorn main:app --reload
     ```
@@ -73,9 +77,11 @@ Gunakan opsi ini jika Anda ingin menyediakan layanan API untuk aplikasi lain (mi
 
 - **File JSON Tidak Ditemukan**:
   Pastikan file `fhir_data_1000.json` ada di folder root proyek. Jika belum ada, jalankan script generator:
+
   ```bash
   python generate_dataset.py
   ```
+
   Lalu pastikan path di `.env` sudah benar (`../fhir_data_1000.json` jika menjalankan dari folder `AI`).
 
 - **Error API Key**:
