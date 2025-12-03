@@ -45,7 +45,7 @@ def load_data():
             st.error(f"Error membaca JSON: {e}")
     else:
         # Fallback jika file tidak ketemu
-        st.error(f"❌ File '{JSON_FILENAME}' tidak ditemukan di: {current_dir}")
+        st.error(f"❌ File '{file_path}' tidak ditemukan di: {os.path.dirname(file_path)}")
         st.warning("👉 Pastikan Anda menjalankan perintah 'streamlit run app.py' DARI DALAM folder AI.")
         
     return options, bundle
