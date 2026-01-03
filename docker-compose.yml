@@ -5,7 +5,7 @@ services:
     image: healthbridge-ai:latest
     container_name: healthbridge-app
     ports:
-      - "8501:8501"  # Hanya expose Streamlit
+      - "8501:8501" # Hanya expose Streamlit
     volumes:
       - .:/app
     env_file:
