@@ -160,8 +160,9 @@ if st.button("🔍 ANALISA DATA PASIEN", type="primary", use_container_width=Tru
     else:
         try:
             with st.spinner('🤖 AI sedang menganalisis Tanda Vital & Interaksi Obat...'):
-                # API Call ke Localhost
-                api_url = f"http://localhost:8000/analyze/{selected_nik}"
+                # API Call - gunakan hostname Docker service jika di container, localhost jika lokal
+                backend_host = os.getenv("BACKEND_HOST", "localhost")
+                api_url = f"http://{backend_host}:8000/analyze/{selected_nik}"
                 response = requests.get(api_url)
                 
             if response.status_code == 200:

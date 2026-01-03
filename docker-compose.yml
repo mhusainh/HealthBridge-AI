@@ -1,0 +1,13 @@
+services:
+  # Single container untuk Frontend + Backend
+  healthbridge:
+    build: .
+    image: healthbridge-ai:latest
+    container_name: healthbridge-app
+    ports:
+      - "8501:8501"  # Hanya expose Streamlit
+    volumes:
+      - .:/app
+    env_file:
+      - AI/.env
+    restart: unless-stopped

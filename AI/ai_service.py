@@ -28,14 +28,29 @@ def load_and_parse_data(filename=JSON_FILENAME):
     print(f"\n📂 Mencari file: {filename}")
     print(f"📍 Di folder: {os.getcwd()}") # Cek kita lagi ada di folder mana
     
-    if not os.path.exists(filename):
-        print(f"❌ FILE TIDAK DITEMUKAN!")
+    # Try multiple possible paths untuk support Docker dan lokal
+    possible_paths = [
+        filename,  # Path dari .env
+        os.path.join(os.getcwd(), filename),  # Current dir + filename
+        os.path.join(os.path.dirname(__file__), '..', filename),  # Relative ke script
+        f"/app/{filename}",  # Docker absolute path
+    ]
+    
+    file_found = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            file_found = path
+            print(f"✅ FILE DITEMUKAN di: {path}")
+            break
+    
+    if not file_found:
+        print(f"❌ FILE TIDAK DITEMUKAN di semua lokasi yang dicoba!")
         return create_emergency_data()
 
     try:
-        with open(filename, 'r') as f:
+        with open(file_found, 'r') as f:
             bundle = json.load(f)
-        print("✅ FILE DITEMUKAN! Sedang parsing...")
+        print("✅ Sedang parsing...")
     except Exception as e:
         print(f"❌ ERROR BACA JSON: {e}")
         return create_emergency_data()
